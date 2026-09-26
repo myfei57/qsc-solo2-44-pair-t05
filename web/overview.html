@@ -16,6 +16,10 @@ th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #232e39; 
 .warn { color: #e6b25e; }
 .bad { color: #e8695f; }
 .pill { display: inline-block; padding: 1px 8px; border-radius: 9px; background: #223040; font-size: 12px; }
+.track { width: 240px; height: 10px; background: #0d1218; border: 1px solid #2b3946; border-radius: 5px; overflow: hidden; display: inline-block; vertical-align: middle; }
+.fill { height: 100%; background: #4d8f6a; }
+.fill.bad { background: #b34a42; }
+.fill.wait { background: #c08a3e; }
 button { background: #26445f; color: #dfe6ee; border: 1px solid #35566f; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 pre { background: #0d1218; padding: 12px; border-radius: 6px; overflow: auto; font-size: 12px; }
 </style>
@@ -32,6 +36,10 @@ pre { background: #0d1218; padding: 12px; border-radius: 6px; overflow: auto; fo
 <section>
   <h2>Subsystems</h2>
   <table id="subsystems"><tbody></tbody></table>
+</section>
+<section>
+  <h2>Vent recovery window</h2>
+  <table id="vent-recovery"><tbody></tbody></table>
 </section>
 <section>
   <h2>Alarms</h2>
@@ -67,7 +75,37 @@ function render(state) {
     row.innerHTML = `<td class="bad">${alarm.name}</td><td>${alarm.origin}</td><td>tick ${alarm.tick}</td>`;
     alarms.appendChild(row);
   });
+  renderVentRecovery(state);
   document.querySelector('#watermark').textContent = JSON.stringify(state.watermark, null, 2);
+}
+
+function renderVentRecovery(state) {
+  const body = document.querySelector('#vent-recovery tbody');
+  body.innerHTML = '';
+  const vent = (state.subsystems && state.subsystems.vent) || {};
+  const recovery = vent.recovery || {};
+  const size = recovery.window_size || 0;
+  const capacity = recovery.window_capacity || 0;
+  const pct = capacity ? Math.round((recovery.window_progress || 0) * 100) : 0;
+  const latched = vent.latched === true;
+  const flaring = vent.flaring === true;
+  const barClass = recovery.ready ? '' : (recovery.all_above_floor ? 'wait' : 'bad');
+  const fillId = 'vr-fill';
+  const note = recovery.reason || '';
+  const clearAllowed = latched && flaring && recovery.ready === true;
+  const minText = recovery.minimum === null || recovery.minimum === undefined ? '—' : Number(recovery.minimum).toFixed(2);
+  const hint = !latched ? 'latch is clear'
+    : !flaring ? 'flare is not open — clear is locked'
+    : recovery.ready ? 'window complete — clear allowed'
+    : 'waiting for a full window above the floor';
+  const hintClass = clearAllowed ? 'ok' : (latched && !flaring ? 'bad' : 'warn');
+  body.innerHTML =
+    '<tr><td>phase</td><td><span class="pill">' + (vent.phase || '—') + '</span></td>' +
+    '<td>flaring: <b class="' + (flaring ? 'ok' : 'bad') + '">' + flaring + '</b></td></tr>' +
+    '<tr><td>window</td><td><span class="track"><span id="' + fillId + '" class="fill ' + barClass +
+      '" style="width:' + pct + '%"></span></span> ' + size + ' / ' + capacity + ' samples (' + pct + '%)</td>' +
+    '<td>min ' + minText + ' % / floor ' + Number(recovery.floor || 0).toFixed(2) + ' %</td></tr>' +
+    '<tr><td>clear</td><td class="' + hintClass + '">' + hint + '</td><td>' + note + '</td></tr>';
 }
 render(JSON.parse(document.getElementById('bootstrap').textContent));
 document.getElementById('refresh').addEventListener('click', function () {

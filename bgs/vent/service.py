@@ -60,7 +60,7 @@ class VentService(LineService):
     def recover(self) -> dict[str, Any]:
         """Release the quality latch once a full window sits above the floor."""
 
-        self.require("vent.recover")
+        self.require("vent.recover", required_phase=VentPhase.FLARING.value)
         self._sync_latch()
         window = rebuild_window(
             self.context.store.visible(),
@@ -82,17 +82,22 @@ class VentService(LineService):
         self._sync_latch()
         vent = state.get("vent", {})
         flare = vent.get("flare") if isinstance(vent, dict) else None
+        flaring = bool(flare.get("active", False)) if isinstance(flare, dict) else False
         window = rebuild_window(
             self.context.store.visible(),
             span_ticks=self.context.config.limits.quality_window_ticks,
             capacity=self.context.config.limits.quality_window_capacity,
+            kind=QUALITY_KIND,
         )
+        recovery = recovery_ready(window, floor=self.context.config.limits.methane_min_percent)
+        progress = recovery.describe()
         return {
             "phase": self.machine.phase,
             "sequence": self.machine.order(),
             "latched": latch_state(state, "vent"),
             "latch": self._latch.describe(),
-            "flaring": bool(flare.get("active", False)) if isinstance(flare, dict) else False,
+            "flaring": flaring,
+            "recovery": progress,
         }
 
     def _sync_latch(self) -> None:
