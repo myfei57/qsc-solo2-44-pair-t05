@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ..decision.window import SampleWindow
 from ..errors import InterlockBlockedError
 from ..event.bus import Event
 from ..facts import latch_state
@@ -12,7 +13,7 @@ from ..service_base import LineService
 from ..statemachine.latch import Latch
 from ..statemachine.phases import VentPhase
 from .flare import flare_payload, plan_flare
-from .recovery import recovery_ready
+from .recovery import RecoveryCheck, recovery_ready
 
 LATCH_KIND = "vent.latch"
 CLEAR_KIND = "vent.clear"
@@ -60,15 +61,9 @@ class VentService(LineService):
     def recover(self) -> dict[str, Any]:
         """Release the quality latch once a full window sits above the floor."""
 
-        self.require("vent.recover")
+        self.require("vent.recover", required_phase=VentPhase.FLARING.value)
         self._sync_latch()
-        window = rebuild_window(
-            self.context.store.visible(),
-            span_ticks=self.context.config.limits.quality_window_ticks,
-            capacity=self.context.config.limits.quality_window_capacity,
-            kind=QUALITY_KIND,
-        )
-        check = recovery_ready(window, floor=self.context.config.limits.methane_min_percent)
+        check = self._recovery_check()
         if not check.ready:
             raise InterlockBlockedError("quality window does not allow the latch to clear", **check.describe())
         event = self._latch.clear(tick=self.context.clock.now(), reason=check.reason)
@@ -82,18 +77,31 @@ class VentService(LineService):
         self._sync_latch()
         vent = state.get("vent", {})
         flare = vent.get("flare") if isinstance(vent, dict) else None
-        window = rebuild_window(
-            self.context.store.visible(),
-            span_ticks=self.context.config.limits.quality_window_ticks,
-            capacity=self.context.config.limits.quality_window_capacity,
-        )
+        window = self._recovery_window()
+        check = recovery_ready(window, floor=self.context.config.limits.methane_min_percent)
         return {
             "phase": self.machine.phase,
             "sequence": self.machine.order(),
             "latched": latch_state(state, "vent"),
             "latch": self._latch.describe(),
             "flaring": bool(flare.get("active", False)) if isinstance(flare, dict) else False,
+            "recovery": {
+                **check.describe(),
+                "capacity": window.capacity,
+                "span_ticks": window.span_ticks,
+            },
         }
+
+    def _recovery_window(self) -> SampleWindow:
+        return rebuild_window(
+            self.context.store.visible(),
+            span_ticks=self.context.config.limits.quality_window_ticks,
+            capacity=self.context.config.limits.quality_window_capacity,
+            kind=QUALITY_KIND,
+        )
+
+    def _recovery_check(self) -> RecoveryCheck:
+        return recovery_ready(self._recovery_window(), floor=self.context.config.limits.methane_min_percent)
 
     def _sync_latch(self) -> None:
         state = self.state()

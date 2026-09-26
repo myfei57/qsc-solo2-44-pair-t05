@@ -31,9 +31,15 @@ class RecoveryCheck:
 
 
 def recovery_ready(window: SampleWindow, *, floor: float) -> RecoveryCheck:
-    """Report whether the newest reading sits above the floor."""
+    """Report whether a full window sits back at or above the floor."""
 
     minimum = window.minimum()
     full = window.is_full()
-    ready = window.size() > 0
-    return RecoveryCheck(ready, "newest reading is above the floor" if ready else "still low", window.size(), full, minimum, floor)
+    ready = full and window.all_at_least(floor)
+    if ready:
+        reason = "full window is back above the floor"
+    elif not full:
+        reason = "window is still filling"
+    else:
+        reason = "window still holds a reading under the floor"
+    return RecoveryCheck(ready, reason, window.size(), full, minimum, floor)

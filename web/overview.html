@@ -34,6 +34,10 @@ pre { background: #0d1218; padding: 12px; border-radius: 6px; overflow: auto; fo
   <table id="subsystems"><tbody></tbody></table>
 </section>
 <section>
+  <h2>Vent recovery</h2>
+  <table id="vent-recovery"><tbody></tbody></table>
+</section>
+<section>
   <h2>Alarms</h2>
   <table id="alarms"><tbody></tbody></table>
 </section>
@@ -60,6 +64,24 @@ function render(state) {
     row.innerHTML = `<td>${name}</td><td><code>${JSON.stringify(state.subsystems[name])}</code></td>`;
     body.appendChild(row);
   });
+  const recovery = (state.subsystems.vent || {}).recovery;
+  const recoveryBody = document.querySelector('#vent-recovery tbody');
+  recoveryBody.innerHTML = '';
+  if (recovery) {
+    const minimum = recovery.minimum === null ? 'no readings yet' : `${recovery.minimum} % (floor ${recovery.floor} %)`;
+    const verdict = recovery.ready
+      ? '<span class="ok">ready — latch may be released</span>'
+      : `<span class="warn">${recovery.reason}</span>`;
+    [
+      ['window', `${recovery.window_size}/${recovery.capacity} readings inside ${recovery.span_ticks} ticks`],
+      ['window minimum', minimum],
+      ['latch release', verdict],
+    ].forEach(([label, value]) => {
+      const row = document.createElement('tr');
+      row.innerHTML = `<td>${label}</td><td>${value}</td>`;
+      recoveryBody.appendChild(row);
+    });
+  }
   const alarms = document.querySelector('#alarms tbody');
   alarms.innerHTML = '';
   (state.alarms || []).forEach((alarm) => {

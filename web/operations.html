@@ -45,6 +45,8 @@ const commands = [
   ['/api/compress/start', {}],
   ['/api/mem/valve', {}],
   ['/api/mem/analyze', null, 'methane'],
+  ['/api/vent/flare', {reason: 'quality latch'}],
+  ['/api/vent/recover', {}],
   ['/api/gas/inlet', {}]
 ];
 const labels = {
@@ -59,6 +61,8 @@ const labels = {
   '/api/compress/start': 'start compressor',
   '/api/mem/valve': 'open valve',
   '/api/mem/analyze': 'analyse gas',
+  '/api/vent/flare': 'open flare',
+  '/api/vent/recover': 'release latch',
   '/api/gas/inlet': 'open inlet'
 };
 function payloadFor(entry) {
